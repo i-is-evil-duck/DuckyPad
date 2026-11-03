@@ -321,24 +321,24 @@ KEY_ALIASES = {
     "mute": "volume_mute", "volume_mute": "volume_mute",
 }
 
-# virtual-key codes for media keys (keyboard lib doesn't know these)
+# virtual-key codes (winuser.h): NEXT=0xB0, PREV=0xB1, STOP=0xB2, PLAY=0xB3,
+# VOLUMEs 0xAD-0xAF. (0xB4-0xB7 are launch-mail/app1/app2 - not media keys.)
 MEDIA_VK = {
     "play/pause": 0xB3, "play": 0xB3,
-    "next": 0xB7, "prev": 0xB6, "stop": 0xB4,
+    "next": 0xB0, "prev": 0xB1, "stop": 0xB2,
     "volume_up": 0xAF, "volume_down": 0xAE, "volume_mute": 0xAD,
 }
-# extended-key scancodes used by real keyboards for these keys
-MEDIA_SCAN = {0xB3: 0x22, 0xB7: 0x19, 0xB6: 0x10, 0xB4: 0x24}
-MEDIA_EXTENDED = {0xB7, 0xB6, 0xB4}  # next / prev / stop arrive as extended keys
+# extended-key scancodes — kept for reference/verification only (plain-VK path is the
+# one that actually delivers proper extended media events on Windows)
+MEDIA_SCAN = {0xB3: 0x22, 0xB0: 0x19, 0xB1: 0x10, 0xB2: 0x24}
 
 def _normalise_key(k):
     k = (k or "").strip().lower().replace(" ", "_").replace("-", "_")
     return KEY_ALIASES.get(k, k)
 
 
-def _send_vk(vk, scan=None, extended=False):
-    """Send a virtual key press+release directly. For extended media keys pass scan+extended
-    so the event looks identical to a real keyboard's E0-prefix media key."""
+def _send_vk(vk):
+    """Send a press+release of a virtual key directly via SendInput."""
     import ctypes
     import ctypes.wintypes as wt
     PUL = ctypes.POINTER(ctypes.c_ulong)
@@ -353,20 +353,14 @@ def _send_vk(vk, scan=None, extended=False):
     class INPUT(ctypes.Structure):
         _fields_ = [("type", wt.DWORD), ("union", INPUTUNION)]
 
-    if extended and scan is not None:
-        down_flags, up_flags, wvk, wscan = 8 | 4, 8 | 4 | 2, 0, scan      # SCANCODE | EXTENDEDKEY (+KEYUP)
-    else:
-        down_flags, up_flags, wvk, wscan = 0, 2, vk, 0                    # plain VK
-
     def _event(flags):
         i = INPUT()
         i.type = 1  # INPUT_KEYBOARD
-        i.union.ki.wVk = wvk
-        i.union.ki.wScan = wscan
+        i.union.ki.wVk = vk
         i.union.ki.dwFlags = flags
         return i
 
-    arr = (INPUT * 2)(_event(down_flags), _event(up_flags))
+    arr = (INPUT * 2)(_event(0), _event(2))  # 0=down, 2=KEYEVENTF_KEYUP
     ctypes.windll.user32.SendInput(2, arr, ctypes.sizeof(INPUT))
 
 
@@ -375,11 +369,7 @@ def send_media(name):
     vk = MEDIA_VK.get(k)
     if vk is None:
         return False
-    scan = MEDIA_SCAN.get(vk)
-    if vk in MEDIA_EXTENDED and scan is not None:
-        _send_vk(vk, scan=scan, extended=True)   # extended scancode: identical to a real media key
-    else:
-        _send_vk(vk)                             # play/pause & volume keys work as plain VK
+    _send_vk(vk)
     return True
 
 
