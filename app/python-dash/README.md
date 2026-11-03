@@ -28,9 +28,9 @@ slider1|slider2|slider3|slider4|slider5|btn1|btn2|btn3|btn4|btn5|btn6|btn7|btn8
   - `None`, `Master volume`, `App volume` (list exe names like `spotify.exe`), or `Monitor brightness` (pick one monitor or all)
   - Invert toggle, live raw readout, `Capture min` / `Capture max` calibration buttons
   - Auto-calibration (on by default) widens the range as you move the sliders
-- **Macro pad** tab — per button: fire on press or release, hold-to-repeat for key combos, and an action:
-  - Key combo (`ctrl+shift+v`, with a ⏺ key-recorder), typed text, media key, launch a program, master mute, brightness up/down nudge
-  - **Multi-step sequence** — a visual step editor (`+ Add step`): send keys / type text / media key / launch program / wait delay / mute / brightness nudge, reorderable with ▲▼ and removable with ✕. Steps run top to bottom when the button fires.
+- **Macro pad** tab — per button: fire on press or release, hold-to-hold (keyboard combos **and mouse buttons**), and an action:
+  - Key combo (`ctrl+shift+v`, with a ⏺ key-recorder), typed text, media key, **mouse click** (left/right/middle, `left,2` = double-click), launch a program, master mute, brightness up/down nudge
+  - **Multi-step sequence** — a visual step editor (`+ Add step`): send keys / mouse click / mouse down (hold) / mouse up / mouse move dx,dy / scroll / type text / media key / launch program / wait delay / mute / brightness nudge, reorderable with ▲▼ and removable with ✕. Steps run top to bottom when the button fires — so you can build mouse-button sequences (e.g. hold right + move) easily with **Mouse down (hold)** and **Mouse up** steps.
   - `▶ Test` button to try actions without touching the hardware
 - Header: serial port/baud settings, serial connection status, `Save`.
 

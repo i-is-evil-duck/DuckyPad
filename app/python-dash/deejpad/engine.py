@@ -83,19 +83,26 @@ class Engine:
         is_press = state == 1
         if trigger == "press" and not is_press:
             if index in self.held:
-                actions.combo_up(self.held.pop(index)["combo"])
+                t2, v2 = self.held.pop(index)
+                if t2 == "combo":
+                    actions.combo_up(v2)
+                elif t2 == "mouse_click":
+                    actions.mouse_up(v2)
             return
         if trigger == "release" and is_press:
             return
         t = action.get("type")
         v = action.get("value", "")
-        if b.get("hold") and t == "combo" and is_press:
-            self.held[index] = action
-            actions.combo_down(str(v))
+        if b.get("hold") and t in ("combo", "mouse_click") and is_press:
+            self.held[index] = (t, str(v))
+            if t == "combo":
+                actions.combo_down(str(v))
+            else:
+                actions.mouse_down(v or "left")
             return
         if index in self.held:
             del self.held[index]
-        if t in ("combo", "media", "text", "launch", "mute", "brightness_up", "brightness_down"):
+        if t in ("combo", "media", "text", "launch", "mute", "brightness_up", "brightness_down", "mouse_click"):
             actions.execute_steps([{"type": t, "value": v, "display": action.get("display", "all")}])
         elif t == "steps":
             steps = action.get("steps") or []
@@ -104,6 +111,8 @@ class Engine:
         elif t == "app_mute":
             for name in action.get("apps", []) or []:
                 actions.toggle_app_mute(name)
+        elif t == "mouse_click":
+            actions.mouse_click(v)
 
     # -------------------------------------------------- apply loop
 

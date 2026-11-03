@@ -229,11 +229,12 @@ function renderSliders(){
 }
 
 /* ---------- macro pad ---------- */
-const ACTION_TYPES=[['none','None'],['combo','Key combo'],['text','Type text'],['media','Media key'],
+const ACTION_TYPES=[['none','None'],['combo','Key combo'],['mouse_click','Mouse click'],['text','Type text'],['media','Media key'],
   ['launch','Launch program'],['mute','Mute master'],['brightness_up','Brightness up'],['brightness_down','Brightness down'],['steps','Multi-step sequence']];
-const STEP_TYPES=[['combo','Send keys'],['text','Type text'],['media','Media key'],['launch','Launch'],['delay','Wait (s)'],['brightness_up','Bright +'],['brightness_down','Bright −'],['mute','Mute all']];
-const STEP_PLACE={combo:'combo e.g. ctrl+shift+s',text:'text to type',media:'play / next / prev / stop / vol_up / mute',launch:'program e.g. notepad',delay:'seconds e.g. 0.3',brightness_up:'amount (5)',brightness_down:'amount (5)'};
+const STEP_TYPES=[['combo','Send keys'],['mouse_click','Mouse click'],['mouse_down','Mouse down (hold)'],['mouse_up','Mouse up'],['mouse_move','Mouse move (dx,dy)'],['wheel','Scroll'],['text','Type text'],['media','Media key'],['launch','Launch'],['delay','Wait (s)'],['brightness_up','Bright +'],['brightness_down','Bright −'],['mute','Mute all']];
+const STEP_PLACE={combo:'combo e.g. ctrl+shift+s',mouse_click:'left / right / middle (left,2 = double)',mouse_down:'left / right / middle',mouse_up:'left / right / middle',mouse_move:'dx,dy e.g. 100,-50',wheel:'clicks, − = down e.g. −3',text:'text to type',media:'play / next / prev / stop / vol_up / mute',launch:'program e.g. notepad',delay:'seconds e.g. 0.3',brightness_up:'amount (5)',brightness_down:'amount (5)'};
 const MEDIA_KEYS=['play','next','prev','stop','vol_up','vol_down','mute'];
+const MOUSE_KEYS=['left','right','middle','left,2','left,3','right,2'];
 
 function comboInput(value,onset){
   const wrap=el('span'); wrap.style.cssText='display:flex;gap:4px;flex:1;align-items:center';
@@ -246,10 +247,10 @@ function comboInput(value,onset){
   return wrap;
 }
 
-function mediaInput(value,onset){
-  const inp=el('input'); inp.value=value||''; inp.setAttribute('list','medios');
-  const dl=el('datalist'); dl.id='medios';
-  MEDIA_KEYS.forEach(m=>{const o=el('option'); o.value=m; dl.appendChild(o)});
+function mediaInput(value,onset,listId='medios',options=MEDIA_KEYS){
+  const inp=el('input'); inp.value=value||''; inp.setAttribute('list',listId);
+  const dl=el('datalist'); dl.id=listId;
+  options.forEach(m=>{const o=el('option'); o.value=m; dl.appendChild(o)});
   inp.onchange=()=>onset(inp.value);
   const wrap=el('span'); wrap.style.cssText='display:flex;gap:4px;flex:1';
   wrap.appendChild(inp); wrap.appendChild(dl);
@@ -286,7 +287,8 @@ function stepEditor(btn){
 
 async function mkInput(st,setVal){
   if(st.type==='combo')return comboInput(st.value,setVal);
-  if(st.type==='media')return mediaInput(st.value,setVal);
+  if(st.type==='media')return mediaInput(st.value,setVal,'medios',MEDIA_KEYS);
+  if(['mouse_click','mouse_down','mouse_up'].includes(st.type))return mediaInput(st.value,setVal,'mbtns',MOUSE_KEYS);
   const inp=el('input'); inp.value=st.value??''; inp.placeholder=STEP_PLACE[st.type]||'';
   inp.onchange=()=>setVal(inp.value);
   return inp;
@@ -331,6 +333,10 @@ function renderButtons(){
       }else if(t==='media'){
         const r=el('div','row'); r.style.flex='1';
         r.appendChild(mediaInput(b.action.value,v=>{b.action.value=v; pushConfig()}));
+        main.appendChild(r);
+      }else if(t==='mouse_click'){
+        const r=el('div','row'); r.style.flex='1';
+        r.appendChild(mediaInput(b.action.value||'left',v=>{b.action.value=v; pushConfig()},'mbtns',MOUSE_KEYS));
         main.appendChild(r);
       }else if(t!=='none'&&t!=='mute'){
         const r=el('div','row');

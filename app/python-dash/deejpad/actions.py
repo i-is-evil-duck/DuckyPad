@@ -177,6 +177,51 @@ def nudge_brightness(delta, display="all"):
         print(f"[brightness] nudge error: {e}")
 
 
+# ---------------------------------------------------------------- mouse
+
+MOUSE_BUTTONS = ("left", "right", "middle")
+
+
+def _split_mouse(value):
+    parts = [p.strip() for p in str(value or "").replace(" ", ",").split(",") if p.strip()]
+    button = parts[0].lower() if parts and parts[0].lower() in MOUSE_BUTTONS else "left"
+    return button, parts
+
+
+def mouse_click(value="left"):
+    import mouse
+    button, parts = _split_mouse(value)
+    clicks = 1
+    if len(parts) > 1 and parts[1].isdigit() and int(parts[1]) > 0:
+        clicks = int(parts[1])
+    mouse.click(button, clicks)
+
+
+def mouse_down(value="left"):
+    import mouse
+    mouse.press(_split_mouse(value)[0])
+
+
+def mouse_up(value="left"):
+    import mouse
+    mouse.release(_split_mouse(value)[0])
+
+
+def mouse_move(value):
+    parts = [p.strip() for p in str(value or "0,0").split(",")][:2]
+    dx = int(parts[0]) if parts and parts[0].lstrip("-").isdigit() else 0
+    dy = int(parts[1]) if len(parts) > 1 and parts[1].lstrip("-").isdigit() else 0
+    import mouse
+    mouse.move(dx, dy, absolute=False, duration=0)
+
+
+def mouse_wheel(value):
+    parts = [p.strip() for p in str(value or "0").split(",")]
+    n = float(parts[0]) if parts and parts[0].lstrip("-").replace(".", "", 1).isdigit() else 0.0
+    import mouse
+    mouse.wheel(n)
+
+
 # ---------------------------------------------------------------- macros
 
 KEY_ALIASES = {
@@ -234,6 +279,16 @@ def _run_steps(steps):
                 nudge_brightness(-(int(v) if str(v).strip() else 5), step.get("display", "all"))
             elif t == "mute":
                 toggle_master_mute()
+            elif t == "mouse_click":
+                mouse_click(v)
+            elif t == "mouse_down":
+                mouse_down(v)
+            elif t == "mouse_up":
+                mouse_up(v)
+            elif t == "mouse_move":
+                mouse_move(v)
+            elif t == "wheel":
+                mouse_wheel(v)
         except Exception as e:
             print(f"[macro] step {step} failed: {e}")
 
