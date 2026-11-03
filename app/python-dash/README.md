@@ -11,6 +11,14 @@ python run.py
 
 The dashboard opens at **http://127.0.0.1:8420**. The app auto-reconnects to COM4 if the board drops out. Everything you configure is saved to `config.json`.
 
+A **tray icon** lives in the system tray while the app runs:
+
+- **Open dashboard** (also the double-click action)
+- **Stop reading board** / **Start reading board** — releases COM4 so the Arduino IDE serial monitor can use it, without closing the app
+- **Quit** — full shutdown
+
+For autostart on login, put a shortcut to `pythonw.exe run.py` (working dir = this folder) into `shell:startup`.
+
 ## Hardware serial format
 
 Your board sends one line per update, pipe-separated, 13 values:

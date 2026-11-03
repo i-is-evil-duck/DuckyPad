@@ -6,4 +6,6 @@ comtypes>=1.4
 screen-brightness-control>=0.22
 keyboard>=0.13.5
 mouse>=1.1.7
+pystray>=0.19.5
+pillow>=10
 psutil>=5.9
