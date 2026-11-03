@@ -13,8 +13,8 @@ The dashboard opens at **http://127.0.0.1:8420**. The app auto-reconnects to COM
 
 A **tray icon** lives in the system tray while the app runs:
 
-- **Open dashboard** (also the double-click action)
-- **Stop reading board** / **Start reading board** — releases COM4 so the Arduino IDE serial monitor can use it, without closing the app
+- **Open dashboard** (also the double-click action) — starts the dashboard if needed, then opens a tab
+- **Stop web dashboard** / **Start web dashboard** — shuts down or brings back the web UI only; the board keeps reading and applying volume / brightness / macro mappings regardless
 - **Quit** — full shutdown
 
 For autostart on login, put a shortcut to `pythonw.exe run.py` (working dir = this folder) into `shell:startup`.

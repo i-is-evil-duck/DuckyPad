@@ -1,4 +1,8 @@
-"""Start deejpad: web dashboard at http://127.0.0.1:8420 + system-tray icon."""
+"""Start deejpad: web dashboard at http://127.0.0.1:8420 + system-tray icon.
+
+The tray item stops/starts ONLY the web dashboard; the board keeps reading and
+applying volume / brightness / macros regardless.
+"""
 import os
 import sys
 import threading
@@ -20,7 +24,10 @@ PORT = 8420
 URL = f"http://{HOST}:{PORT}"
 
 _icon = None
-_browser_opened = False
+_server = None                 # uvicorn.Server instance (swappable)
+_server_thread = None
+_server_on = False
+_server_lock = threading.Lock()
 
 
 def _make_icon():
@@ -35,27 +42,54 @@ def _make_icon():
     return img
 
 
+def server_running():
+    return _server_on
+
+
+def start_server(icon=None, item=None):
+    global _server, _server_thread, _server_on
+    with _server_lock:
+        if _server_on:
+            return
+        cfg = uvicorn.Config(app, host=HOST, port=PORT, log_level="warning", access_log=False)
+        _server = uvicorn.Server(cfg)
+        _server_on = True
+        _server_thread = threading.Thread(target=_server.run, daemon=True)
+        _server_thread.start()
+
+
+def stop_server(icon=None, item=None):
+    global _server_on
+    global _server, _server_thread
+    with _server_lock:
+        if not _server_on:
+            return
+        _server_on = False
+        srv = _server
+        thr = _server_thread
+    if srv is not None:
+        srv.should_exit = True   # uvicorn exits gracefully on its own thread
+    if thr is not None and thr.is_alive():
+        thr.join(timeout=5)
+
+
 def open_dashboard(icon=None, item=None):
-    global _browser_opened
+    start_server()          # make sure it's running, then open a tab
     webbrowser.open(URL)
-    _browser_opened = True
 
 
-def toggle_serial(icon=None, item=None):
-    if engine.link_enabled:
-        engine.stop_serial()
-    else:
-        engine.start_serial()
-
-
-def _serial_label(_=None):
-    return "Stop reading board" if engine.link_enabled else "Start reading board"
+def _dash_label(_=None):
+    return "Stop web dashboard" if _server_on else "Start web dashboard"
 
 
 def quit_app(icon=None, item=None):
     try:
         engine.save_if_dirty()
         engine.stop()
+        with _server_lock:
+            _server_on = False
+        if _server is not None:
+            _server.should_exit = True
     finally:
         if _icon is not None:
             _icon.stop()
@@ -63,27 +97,21 @@ def quit_app(icon=None, item=None):
 
 
 def main():
+    # board reading + applying volume/brightness/macros runs for the whole session
     engine.start()
-    threading.Thread(
-        target=uvicorn.run,
-        args=(app,),
-        kwargs={"host": HOST, "port": PORT, "log_level": "warning"},
-        daemon=True,
-    ).start()
+    start_server()
 
     import pystray
-    from PIL import Image
-
     menu = pystray.Menu(
         pystray.MenuItem("Open dashboard", open_dashboard, default=True),
-        pystray.MenuItem(_serial_label, toggle_serial),
+        pystray.MenuItem(_dash_label, lambda icon, item: (stop_server() if _server_on else start_server())),
         pystray.MenuItem("Quit", quit_app),
     )
     icon = pystray.Icon("deejpad", _make_icon(), "DuckyPad deej", menu)
     global _icon
     _icon = icon
 
-    threading.Timer(1.2, open_dashboard).start()
+    threading.Timer(1.2, lambda: webbrowser.open(URL)).start()
     icon.run()   # blocks until quit selected
 
 
