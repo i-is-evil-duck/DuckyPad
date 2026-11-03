@@ -58,6 +58,19 @@ slider1|slider2|slider3|slider4|slider5|btn1|btn2|btn3|btn4|btn5|btn6|btn7|btn8
 
 Button 1 toggles the master mute. Calibrations default to raw 0–888 inverted (the board reads `~888` at 0%, `~0` at 100%).
 
+## Compiling to an exe
+
+```
+pip install pyinstaller
+pyinstaller --noconfirm --onefile --windowed --name deejpad ^
+  --add-data "static;static" --add-data "config.default.json;." ^
+  --collect-all pycaw --collect-all screen_brightness_control --collect-all pystray ^
+  --collect-all keyboard --collect-all mouse --hidden-import comtypes.gen ^
+  --hidden-import pystray._win32 run.py
+```
+
+Result: `dist/deejpad.exe` (single file, no console). Drop the exe anywhere; `config.json` lives next to the exe. The `deejpad.spec` file keeps the exact build settings.
+
 ## Notes
 
 - Only one program can hold COM4. Close any Arduino IDE serial monitor or other terminal using the port, or the app reports "access denied" and keeps retrying.

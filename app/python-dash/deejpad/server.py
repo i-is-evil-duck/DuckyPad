@@ -8,9 +8,16 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from . import actions, config as appconfig
 from .engine import engine
 
+import os
+import sys
+
 app = FastAPI(title="deejpad")
 
-STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
+STATIC_DIR = (
+    os.path.join(sys._MEIPASS, "static")
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
+    else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
+)
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -1,9 +1,20 @@
-"""Configuration load/save for deejpad. Stored as config.json next to this package."""
+"""Configuration load/save for deejpad. Stored as config.json next to the app."""
 import json
 import os
+import sys
 import threading
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+def _base_dir():
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)      # next to the .exe
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+CONFIG_PATH = os.path.join(_base_dir(), "config.json")
+_DEFAULT_CFG_PATH = (
+    os.path.join(sys._MEIPASS, "config.default.json")
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
+    else os.path.join(_base_dir(), "config.default.json")
+)
 _lock = threading.Lock()
 
 NUM_SLIDERS = 5
@@ -44,9 +55,7 @@ def defaults():
 def load():
     path = CONFIG_PATH
     if not os.path.exists(path):
-        fallback = os.path.join(os.path.dirname(CONFIG_PATH), "config.default.json")
-        if os.path.exists(fallback):
-            path = fallback
+        path = _DEFAULT_CFG_PATH
     cfg = defaults()
     try:
         with open(path, "r", encoding="utf-8") as f:
