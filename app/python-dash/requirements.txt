@@ -1,0 +1,8 @@
+fastapi>=0.110
+uvicorn>=0.29
+pyserial>=3.5
+pycaw>=20240210
+comtypes>=1.4
+screen-brightness-control>=0.22
+keyboard>=0.13.5
+psutil>=5.9

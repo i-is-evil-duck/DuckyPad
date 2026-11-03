@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>deejpad dashboard</title>
+<style>
+  :root{
+    --bg:#12141a; --panel:#1b1e27; --panel2:#222633; --line:#2e3342;
+    --text:#e8eaf0; --muted:#9aa1b2; --accent:#4ea1ff; --ok:#3ddc84; --warn:#ff5c5c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--warn)}
+  .dot.on{background:var(--ok)}
+  input,select,textarea,button{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 9px}
+  button{cursor:pointer} button:hover{border-color:var(--accent)}
+  button.small{padding:3px 8px;font-size:12px;border-radius:6px}
+  main{padding:20px;max-width:1100px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card.live{border-color:var(--accent)}
+  .card h3{margin:0 0 10px;font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .row{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
+  .row label{color:var(--muted);min-width:70px;font-size:13px}
+  .bar{height:14px;background:var(--panel2);border-radius:7px;overflow:hidden;margin:8px 0;position:relative}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,#4ea1ff,#8b5cf6);width:0%;transition:width .08s linear}
+  .bar>span{position:absolute;right:8px;top:-2px;font-size:11px;color:#dfe4ee;text-shadow:0 1px 2px #0009}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:2px 10px;font-size:12px;display:flex;gap:6px;align-items:center}
+  .chip b{cursor:pointer;color:var(--muted)}
+  .muted{color:var(--muted);font-size:12px}
+  .btnpad.on{box-shadow:0 0 0 2px var(--ok) inset}
+  .settings{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-left:auto}
+  .tabs{display:flex;gap:6px;margin-bottom:16px}
+  .tabs button{border-radius:8px}
+  .tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .hide{display:none!important}
+  #toast{position:fixed;bottom:16px;right:16px;background:var(--panel2);border:1px solid var(--line);padding:10px 14px;border-radius:10px;opacity:0;transition:opacity .2s}
+  #toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span><h1>deejpad</h1>
+  <span class="muted" id="conn">connecting…</span>
+  <div class="settings">
+    <input id="port" style="width:90px" title="Serial port">
+    <input id="baud" style="width:90px" title="Baud rate">
+    <label class="muted" style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="autocal" style="width:auto"> auto-cal</label>
+    <button class="small" id="reload">Reload serial</button>
+    <button class="small" id="save">Save</button>
+  </div>
+</header>
+<main>
+  <div class="tabs">
+    <button data-tab="sliders" class="on">Sliders</button>
+    <button data-tab="buttons">Macro pad</button>
+    <button data-tab="help">Help</button>
+  </div>
+
+  <div id="tab-sliders"><div class="grid" id="sliders"></div></div>
+
+  <div id="tab-buttons" class="hide"><div class="grid" id="buttons"></div></div>
+
+  <div id="tab-help" class="hide">
+    <div class="card" style="line-height:1.7">
+      <b>Slider modes</b><br>
+      <b>Master volume</b> — sets the system volume.<br>
+      <b>App volume</b> — sets volume for the listed apps (exe names, e.g. <code>spotify.exe</code>). Add some with the input below the chips. Leave empty = master.<br>
+      <b>Monitor brightness</b> — sets brightness of the chosen monitor (or all).<br>
+      <b>None</b> — ignored.<br><br>
+      <b>Operation</b> — your board reads <code>~888</code> at 0% and <code>0</code> at 100%, so sliders default to <b>inverted</b> with calibration 0–888. Auto-cal watches the raw values and extends the range, or use the capture buttons: put a slider at its bottom, press <b>Capture min</b>, top → <b>Capture max</b>.<br><br>
+      <b>Macros</b> — each pad button can fire a combo (<code>ctrl+shift+s</code>), typed text, a media key, launch a program, master mute, brightness nudge, or a sequence of steps (one per line):
+      <pre style="background:#222633;border:1px solid var(--line);border-radius:8px;padding:8px">combo: ctrl+alt+t
+delay: 0.2
+text: hello world
+launch: notepad
+media: play
+brightness_up: 10</pre>
+      Everything saves to <code>config.json</code> — press Save (or it auto-saves while calibrating).
+    </div>
+  </div>
+</main>
+<div id="toast"></div>
+
+<script>
+let CFG=null, STATE=null, MONITORS=[];
+
+const $=(s,el=document)=>el.querySelector(s);
+const el=(t,cls,html)=>{const e=document.createElement(t);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e};
+
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1600)}
+
+function tabs(){
+  document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    ['sliders','buttons','help'].forEach(t=>$('#tab-'+t).classList.toggle('hide',t!==b.dataset.tab));
+  });
+}
+
+/* ---------- render ---------- */
+function render(){
+  $('#port').value=CFG.port; $('#baud').value=CFG.baud; $('#autocal').checked=!!CFG.auto_calibrate;
+  renderSliders(); renderButtons();
+}
+
+function renderSliders(){
+  const wrap=$('#sliders'); wrap.innerHTML='';
+  CFG.sliders.forEach((s,i)=>{
+    const c=el('div','card'); c.dataset.slider=i;
+    c.appendChild(el('h3',null,`Slider ${i+1}`));
+    const row=el('div','row');
+    row.appendChild(Object.assign(el('label',null,'Mode')));
+    const sel=el('select');
+    [['none','None'],['master','Master volume'],['apps','App volume'],['brightness','Monitor brightness']].forEach(([v,l])=>{
+      const o=el('option',null,l); o.value=v; if(s.mode===v)o.selected=true; sel.appendChild(o);
+    });
+    sel.onchange=()=>{s.mode=sel.value; renderSliders(); $('#save').click()};
+    row.appendChild(sel); c.appendChild(row);
+
+    if(s.mode==='apps'){
+      const chips=el('div','chips');
+      (s.apps||[]).forEach(a=>{
+        const ch=el('span','chip',a+' <b>✕</b>');
+        ch.querySelector('b').onclick=()=>{s.apps=s.apps.filter(x=>x!==a); renderSliders()};
+        chips.appendChild(ch);
+      });
+      c.appendChild(chips);
+      const brow=el('div','row');
+      const inp=el('input'); inp.placeholder='exe name e.g. spotify.exe'; inp.style.flex='1';
+      const add=el('button','small','Add');
+      add.onclick=()=>{const v=inp.value.trim().toLowerCase(); if(v&&!s.apps.includes(v)){s.apps.push(v); inp.value=''; renderSliders(); $('#save').click()}};
+      brow.appendChild(inp); brow.appendChild(add); c.appendChild(brow);
+      const appList=el('div','muted','active: '+(STATE&&STATE.apps.length?STATE.apps.join(', '):'…')); c.appendChild(appList);
+    }
+
+    if(s.mode==='brightness'){
+      const drow=el('div','row');
+      drow.appendChild(Object.assign(el('label',null,'Monitor')));
+      const dsel=el('select');
+      const all=el('option',null,'All monitors'); all.value='all';
+      if(String(s.display)==='all')all.selected=true; dsel.appendChild(all);
+      MONITORS.forEach((m,ix)=>{
+        const o=el('option',null,`#${m.index} ${m.name}`); o.value=String(m.index);
+        if(String(s.display)===String(m.index))o.selected=true; dsel.appendChild(o);
+      });
+      dsel.onchange=()=>{s.display=dsel.value==='all'?'all':parseInt(dsel.value); $('#save').click()};
+      drow.appendChild(dsel); c.appendChild(drow);
+    }
+
+    const inv=el('div','row');
+    inv.appendChild(Object.assign(el('label',null,'Invert')));
+    const cb=el('input'); cb.type='checkbox'; cb.style.width='auto'; cb.checked=!!s.invert;
+    cb.onchange=()=>{s.invert=cb.checked; $('#save').click()};
+    inv.appendChild(cb);
+    const raw=el('span','muted',''); raw.className='muted'; raw.dataset.raw=i;
+    inv.appendChild(raw); c.appendChild(inv);
+
+    const cal=el('div','row');
+    const minb=el('button','small','Capture min'), maxb=el('button','small','Capture max');
+    minb.onclick=()=>{s.min=STATE.raw.sliders[i]; renderSliders(); $('#save').click(); toast(`Slider ${i+1} min = ${s.min}`)};
+    maxb.onclick=()=>{s.max=STATE.raw.sliders[i]; renderSliders(); $('#save').click(); toast(`Slider ${i+1} max = ${s.max}`)};
+    cal.appendChild(minb); cal.appendChild(maxb);
+    cal.appendChild(el('span','muted',`raw ${s.min}–${s.max}`));
+    c.appendChild(cal);
+
+    const bar=el('div','bar'); bar.innerHTML='<i></i><span></span>'; bar.dataset.sliderbar=i;
+    c.appendChild(bar);
+    wrap.appendChild(c);
+  });
+}
+
+const ACTION_TYPES=[['none','None'],['combo','Key combo'],['text','Type text'],['media','Media key'],
+  ['launch','Launch program'],['mute','Mute master'],['brightness_up','Brightness up'],['brightness_down','Brightness down'],['steps','Multi-step sequence']];
+
+const STEP_FIELDS={combo:'combo (e.g. ctrl+shift+s)',text:'text to type',media:'media key (play/next/prev/stop)',launch:'program to launch',brightness_up:'amount (5)',brightness_down:'amount (5)'};
+
+function renderButtons(){
+  const wrap=$('#buttons'); wrap.innerHTML='';
+  CFG.buttons.forEach((b,i)=>{
+    const c=el('div','card'); c.dataset.button=i;
+    const h=el('h3',null,`Button ${i+1}`);
+    const lbl=el('input'); lbl.value=b.label; lbl.style.width='90px'; lbl.placeholder='label';
+    lbl.onchange=()=>{b.label=lbl.value; $('#save').click()};
+    h.appendChild(lbl); c.appendChild(h);
+
+    const r1=el('div','row');
+    r1.appendChild(Object.assign(el('label',null,'When')));
+    const trg=el('select');
+    [['press','Pressed'],['release','Released']].forEach(([v,l])=>{const o=el('option',null,l); o.value=v; if(b.trigger===v)o.selected=true; trg.appendChild(o)});
+    trg.onchange=()=>{b.trigger=trg.value; $('#save').click()};
+    r1.appendChild(trg);
+    const holdLab=el('label','muted','hold'); holdLab.style.cssText='display:flex;gap:4px;align-items:center;min-width:auto';
+    const hold=el('input'); hold.type='checkbox'; hold.style.width='auto'; hold.checked=!!b.hold;
+    hold.onchange=()=>{b.hold=hold.checked; $('#save').click()};
+    holdLab.appendChild(hold); r1.appendChild(holdLab); c.appendChild(r1);
+
+    const r2=el('div','row');
+    r2.appendChild(Object.assign(el('label',null,'Action')));
+    const at=el('select');
+    ACTION_TYPES.forEach(([v,l])=>{const o=el('option',null,l); o.value=v; if((b.action.type||'none')===v)o.selected=true; at.appendChild(o)});
+    r2.appendChild(at); c.appendChild(r2);
+
+    const r3=el('div','row'); r3.style.flex='1';
+    let valInput=null, stepsTA=null;
+    const rebuild=()=>{
+      r3.innerHTML='';
+      const t=b.action.type||'none';
+      if(t==='steps'){
+        stepsTA=el('textarea'); stepsTA.rows=5; stepsTA.style.cssText='flex:1;font-family:Consolas,monospace';
+        stepsTA.value=(b.action.steps||[]).map(s2=>s2.type+': '+s2.value).join('\n');
+        stepsTA.onchange=()=>{
+          b.action.steps=stepsTA.value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+            const li=l.indexOf(':'); if(li<0)return null;
+            const k=l.slice(0,li).trim(), v=l.slice(li+1).trim(); if(!v)return null;
+            return k==='brightness_up'||k==='brightness_down'?{type:k,value:v,display:'all'}:{type:k,value:v};
+          }).filter(Boolean);
+          $('#save').click();
+        };
+        r3.appendChild(stepsTA);
+      }else if(t!=='none'&&t!=='mute'){
+        valInput=el('input'); valInput.style.flex='1'; valInput.value=b.action.value||'';
+        valInput.placeholder=(STEP_FIELDS[t]||'value');
+        valInput.onchange=()=>{b.action.value=valInput.value; $('#save').click()};
+        r3.appendChild(valInput);
+      }
+    };
+    at.onchange=()=>{b.action.type=at.value; b.action.value=b.action.value||''; rebuild(); $('#save').click()};
+    rebuild(); c.appendChild(r3);
+
+    const r4=el('div','row');
+    const test=el('button','small','▶ Test');
+    test.onclick=()=>fetch('/api/test/button',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:b.action})});
+    const hit=el('span','muted',''); hit.dataset.hit=i;
+    r4.appendChild(test); r4.appendChild(hit); c.appendChild(r4);
+    wrap.appendChild(c);
+  });
+}
+
+/* ---------- live updates ---------- */
+function applyState(){
+  if(!STATE)return;
+  $('#dot').classList.toggle('on',STATE.connected);
+  $('#conn').textContent=STATE.connected?'serial connected':'serial: '+((STATE.error||'connecting…').slice(0,60));
+  STATE.pct.forEach((p,i)=>{
+    const bar=document.querySelector(`[data-sliderbar="${i}"]`); if(!bar)return;
+    bar.querySelector('i').style.width=p+'%';
+    bar.querySelector('span').textContent=Math.round(p)+'%';
+    const raw=document.querySelector(`[data-raw="${i}"]`); if(raw)raw.textContent='raw '+STATE.raw.sliders[i];
+  });
+  STATE.buttons.forEach((v,i)=>{
+    const hit=document.querySelector(`[data-hit="${i}"]`);
+    if(hit){hit.textContent=v?'PRESSED':'';hit.style.color='#3ddc84'}
+    const card=document.querySelector(`[data-button="${i}"]`); if(card)card.classList.toggle('live',!!v);
+  });
+  const m=$('#conn');
+}
+
+function refreshApps(){
+  fetch('/api/apps').then(r=>r.json()).then(d=>{
+    document.querySelectorAll('[data-slider] .muted').forEach(a=>{
+      if(a.textContent.startsWith('active: '))a.textContent='active: '+(d.apps.join(', ')||'none');
+    });
+  }).catch(()=>{});
+}
+
+/* ---------- config io ---------- */
+async function loadConfig(){
+  CFG=await (await fetch('/api/config')).json();
+  const hasApps=CFG.sliders.some(s=>s.mode==='apps');
+  fetch('/api/monitors').then(r=>r.json()).then(d=>{MONITORS=d.monitors; renderSliders()}).catch(()=>{});
+  if(hasApps)refreshApps();
+}
+
+$('#save').onclick=async()=>{
+  let p=$('#port').value.trim();
+  if(!p){p='COM4';$('#port').value=p;toast('Port was empty — using COM4')}
+  CFG.port=p; CFG.baud=parseInt($('#baud').value)||9600; CFG.auto_calibrate=$('#autocal').checked;
+  const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(CFG)});
+  toast(r.ok?'Saved':'Save failed'); refreshApps();
+};
+
+$('#reload').onclick=async()=>{
+  let p=$('#port').value.trim();
+  if(!p){p='COM4';$('#port').value=p;toast('Port was empty — using COM4')}
+  CFG.port=p; CFG.baud=parseInt($('#baud').value)||9600;
+  await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(CFG)});
+  toast('Serial settings saved — server reconnects automatically');
+};
+
+$('#autocal').onchange=()=>{CFG.auto_calibrate=$('#autocal').checked; $('#save').click()};
+
+function connectWS(){
+  const ws=new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage=e=>{STATE=JSON.parse(e.data); applyState()};
+  ws.onclose=()=>setTimeout(connectWS,1500);
+}
+
+tabs(); loadConfig(); connectWS();
+setInterval(()=>{const c=document.querySelector('.tabs button.on'); if(c&&c.dataset.tab==='buttons')refreshApps()},5000);
+</script>
+</body>
+</html>

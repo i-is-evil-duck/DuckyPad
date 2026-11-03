@@ -1,0 +1,70 @@
+"""Configuration load/save for deejpad. Stored as config.json next to this package."""
+import json
+import os
+import threading
+
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+_lock = threading.Lock()
+
+NUM_SLIDERS = 5
+NUM_BUTTONS = 8
+
+
+def defaults():
+    sliders = []
+    for i in range(NUM_SLIDERS):
+        sliders.append({
+            "id": i,
+            "mode": "none",            # none | master | apps | brightness | mute
+            "apps": [],                # exe names like ["chrome.exe"] (empty + mode=apps => all sessions? no: empty = master)
+            "display": "all",          # monitor index (int) or "all" for brightness mode
+            "invert": True,            # raw 888 at 0% -> invert so high raw = low output
+            "min": 0,                  # raw value at one end (auto-calibrated)
+            "max": 888,                # raw value at the other end
+        })
+    buttons = []
+    for i in range(NUM_BUTTONS):
+        buttons.append({
+            "id": i,
+            "label": f"B{i + 1}",
+            "trigger": "press",        # press | release
+            "hold": False,             # hold = send while held (only for combo type)
+            "action": {"type": "none", "value": "", "steps": []},
+        })
+    return {
+        "port": "COM4",
+        "baud": 9600,
+        "poll_hz": 30,
+        "auto_calibrate": True,
+        "sliders": sliders,
+        "buttons": buttons,
+    }
+
+
+def load():
+    cfg = defaults()
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            user = json.load(f)
+        # shallow-merge top level, replace lists wholesale
+        for k, v in user.items():
+            if k in ("sliders", "buttons") and isinstance(v, list):
+                base = cfg[k]
+                for i, item in enumerate(v):
+                    if i < len(base) and isinstance(item, dict):
+                        if not isinstance(item.get("apps"), list):
+                            item["apps"] = []
+                        base[i].update(item)
+            else:
+                cfg[k] = v
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print(f"[config] failed to load {CONFIG_PATH}: {e}")
+    return cfg
+
+
+def save(cfg):
+    with _lock:
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
