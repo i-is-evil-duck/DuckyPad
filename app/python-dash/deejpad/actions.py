@@ -1,6 +1,8 @@
 """System control: master/per-app volume, monitor brightness, macros."""
-import threading
+import os
+import shutil
 import time
+import threading
 
 import psutil
 
@@ -137,6 +139,66 @@ def list_programs():
     return _programs_cache
 
 
+def _app_paths_lookup(name):
+    """Windows App Paths registry: how the Start menu resolves bare exe names."""
+    import winreg, os as _os
+    base = name[:-4] if name.lower().endswith(".exe") else name
+    for root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for key in (f"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{base}.exe",
+                    f"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{base}"):
+            try:
+                k = winreg.OpenKey(root, key)
+                val, _ = winreg.QueryValueEx(k, None)
+                val = _os.path.expandvars(str(val).strip('"'))
+                if _os.path.isfile(val):
+                    return val
+            except OSError:
+                continue
+    return None
+
+
+def _find_lnk(name):
+    """Find a matching Start Menu shortcut for the given program name."""
+    import os as _os
+    base = name.lower().removesuffix(".exe")
+    prof = _os.environ.get("USERPROFILE", "")
+    dirs = [
+        _os.path.join(prof, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs"),
+        "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
+    ]
+    best = None
+    for d in dirs:
+        for root, _dirs, files in _os.walk(d):
+            for f in files:
+                low = f.lower()
+                if low.endswith(".lnk") and (low == f"{base}.lnk" or low.startswith(f"{base}.")):
+                    path = _os.path.join(root, f)
+                    if best is None or len(path) < len(best):
+                        best = path
+    return best
+
+
+def _launch(v):
+    """Launch by name or path. Tries: direct path → App Paths → Start Menu shortcut → PATH."""
+    import os as _os
+    import subprocess
+    v = str(v).strip()
+    if not v:
+        return
+    if _os.path.isfile(v) or ("\\" in v or "/" in v):
+        _os.startfile(v)
+        return
+    for cand in (_app_paths_lookup(v), _find_lnk(v)):
+        if cand:
+            _os.startfile(cand)
+            return
+    which = shutil.which(v) or shutil.which(f"{v}.exe")
+    if which:
+        subprocess.Popen([which])
+        return
+    _os.startfile(v)  # last resort – raise the original error
+
+
 # ---------------------------------------------------------------- brightness
 
 _sbc_lock = threading.Lock()
@@ -265,15 +327,18 @@ MEDIA_VK = {
     "next": 0xB7, "prev": 0xB6, "stop": 0xB4,
     "volume_up": 0xAF, "volume_down": 0xAE, "volume_mute": 0xAD,
 }
-
+# extended-key scancodes used by real keyboards for these keys
+MEDIA_SCAN = {0xB3: 0x22, 0xB7: 0x19, 0xB6: 0x10, 0xB4: 0x24}
+MEDIA_EXTENDED = {0xB7, 0xB6, 0xB4}  # next / prev / stop arrive as extended keys
 
 def _normalise_key(k):
     k = (k or "").strip().lower().replace(" ", "_").replace("-", "_")
     return KEY_ALIASES.get(k, k)
 
 
-def _send_vk(vk):
-    """Send a virtual key press+release directly (works for media keys)."""
+def _send_vk(vk, scan=None, extended=False):
+    """Send a virtual key press+release directly. For extended media keys pass scan+extended
+    so the event looks identical to a real keyboard's E0-prefix media key."""
     import ctypes
     import ctypes.wintypes as wt
     PUL = ctypes.POINTER(ctypes.c_ulong)
@@ -288,23 +353,34 @@ def _send_vk(vk):
     class INPUT(ctypes.Structure):
         _fields_ = [("type", wt.DWORD), ("union", INPUTUNION)]
 
+    if extended and scan is not None:
+        down_flags, up_flags, wvk, wscan = 8 | 4, 8 | 4 | 2, 0, scan      # SCANCODE | EXTENDEDKEY (+KEYUP)
+    else:
+        down_flags, up_flags, wvk, wscan = 0, 2, vk, 0                    # plain VK
+
     def _event(flags):
         i = INPUT()
         i.type = 1  # INPUT_KEYBOARD
-        i.union.ki.wVk = vk
+        i.union.ki.wVk = wvk
+        i.union.ki.wScan = wscan
         i.union.ki.dwFlags = flags
         return i
 
-    arr = (INPUT * 2)(_event(0), _event(2))  # 0=down, 2=KEYEVENTF_KEYUP
+    arr = (INPUT * 2)(_event(down_flags), _event(up_flags))
     ctypes.windll.user32.SendInput(2, arr, ctypes.sizeof(INPUT))
 
 
 def send_media(name):
     k = _normalise_key(name)
-    if k in MEDIA_VK:
-        _send_vk(MEDIA_VK[k])
-        return True
-    return False
+    vk = MEDIA_VK.get(k)
+    if vk is None:
+        return False
+    scan = MEDIA_SCAN.get(vk)
+    if vk in MEDIA_EXTENDED and scan is not None:
+        _send_vk(vk, scan=scan, extended=True)   # extended scancode: identical to a real media key
+    else:
+        _send_vk(vk)                             # play/pause & volume keys work as plain VK
+    return True
 
 
 def _do_combo(combo):
@@ -342,10 +418,7 @@ def _run_steps(steps):
                 if not send_media(k):
                     keyboard.send(k)
             elif t == "launch":
-                # ShellExecute resolves bare exe names via PATH + Start Menu/App Paths,
-                # and handles .lnk shortcuts too
-                import os as _os
-                _os.startfile(str(v))
+                _launch(v)
             elif t == "delay":
                 time.sleep(float(v))
             elif t == "brightness_up":
