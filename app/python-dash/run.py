@@ -1,7 +1,15 @@
 """Start deejpad: opens the dashboard at http://127.0.0.1:8420"""
+import sys
 import threading
 import time
 import webbrowser
+
+# pythonw.exe (used for startup without a console) has no stdout/stderr; print() would crash
+import os
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
 
 import uvicorn
 
