@@ -1,0 +1,23 @@
+{
+  "port": "COM4",
+  "baud": 9600,
+  "poll_hz": 30,
+  "auto_calibrate": true,
+  "sliders": [
+    { "mode": "master", "apps": [], "display": "all", "invert": true, "min": 0, "max": 888 },
+    { "mode": "apps", "apps": ["spotify.exe"], "display": "all", "invert": true, "min": 0, "max": 888 },
+    { "mode": "apps", "apps": ["brave.exe", "chrome.exe", "firefox.exe", "chromium.exe", "florp.exe"], "display": "all", "invert": true, "min": 0, "max": 888 },
+    { "mode": "apps", "apps": ["discord.exe", "signal.exe"], "display": "all", "invert": true, "min": 0, "max": 888 },
+    { "mode": "brightness", "apps": [], "display": "all", "invert": true, "min": 0, "max": 888 }
+  ],
+  "buttons": [
+    { "id": 0, "label": "Mute", "trigger": "press", "hold": false, "action": { "type": "mute", "value": "", "steps": [] } },
+    { "id": 1, "label": "B2", "trigger": "press", "hold": false, "action": { "type": "none", "value": "", "steps": [] } },
+    { "id": 2, "label": "B3", "trigger": "press", "hold": false, "action": { "type": "none", "value": "", "steps": [] } },
+    { "id": 3, "label": "B4", "trigger": "press", "hold": false, "action": { "type": "none", "value": "", "steps": [] } },
+    { "id": 4, "label": "B5", "trigger": "press", "hold": false, "action": { "type": "none", "value": "", "steps": [] } },
+    { "id": 5, "label": "B6", "trigger": "press", "hold": false, "action": { "type": "none", "value": "", "steps": [] } },
+    { "id": 6, "label": "B7", "trigger": "press", "hold": false, "action": { "type": "none", "value": "", "steps": [] } },
+    { "id": 7, "label": "B8", "trigger": "press", "hold": false, "action": { "type": "none", "value": "", "steps": [] } }
+  ]
+}

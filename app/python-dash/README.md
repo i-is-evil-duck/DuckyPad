@@ -29,9 +29,24 @@ slider1|slider2|slider3|slider4|slider5|btn1|btn2|btn3|btn4|btn5|btn6|btn7|btn8
   - Invert toggle, live raw readout, `Capture min` / `Capture max` calibration buttons
   - Auto-calibration (on by default) widens the range as you move the sliders
 - **Macro pad** tab — per button: fire on press or release, hold-to-repeat for key combos, and an action:
-  - Key combo (`ctrl+shift+v`), typed text, media key, launch a program, master mute, brightness up/down nudge, or a **multi-step sequence** (one step per line: `combo: …`, `text: …`, `delay: 0.2`, `launch: …`, `media: …`, `brightness_up: 10`)
+  - Key combo (`ctrl+shift+v`, with a ⏺ key-recorder), typed text, media key, launch a program, master mute, brightness up/down nudge
+  - **Multi-step sequence** — a visual step editor (`+ Add step`): send keys / type text / media key / launch program / wait delay / mute / brightness nudge, reorderable with ▲▼ and removable with ✕. Steps run top to bottom when the button fires.
   - `▶ Test` button to try actions without touching the hardware
 - Header: serial port/baud settings, serial connection status, `Save`.
+
+## Default config
+
+`config.default.json` holds the starter mapping and is used when no local `config.json` exists yet:
+
+| Slider | Target |
+|--------|--------|
+| 1 | master volume |
+| 2 | spotify.exe |
+| 3 | brave / chrome / firefox / chromium / florp |
+| 4 | discord / signal |
+| 5 | all monitors' brightness |
+
+Button 1 toggles the master mute. Calibrations default to raw 0–888 inverted (the board reads `~888` at 0%, `~0` at 100%).
 
 ## Notes
 

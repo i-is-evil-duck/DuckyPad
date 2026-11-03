@@ -18,8 +18,9 @@
   input,select,textarea,button{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 9px}
   button{cursor:pointer} button:hover{border-color:var(--accent)}
   button.small{padding:3px 8px;font-size:12px;border-radius:6px}
+  button.rec.on{border-color:var(--warn);color:var(--warn)}
   main{padding:20px;max-width:1100px;margin:0 auto}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
   .card.live{border-color:var(--accent)}
   .card h3{margin:0 0 10px;font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -35,20 +36,29 @@
   .btnpad.on{box-shadow:0 0 0 2px var(--ok) inset}
   .settings{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-left:auto}
   .tabs{display:flex;gap:6px;margin-bottom:16px}
-  .tabs button{border-radius:8px}
   .tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
   .hide{display:none!important}
-  #toast{position:fixed;bottom:16px;right:16px;background:var(--panel2);border:1px solid var(--line);padding:10px 14px;border-radius:10px;opacity:0;transition:opacity .2s}
+  .steps{display:flex;flex-direction:column;gap:5px;margin:6px 0}
+  .step{display:flex;gap:5px;align-items:center}
+  .step select{width:118px}
+  .step input{flex:1;min-width:80px}
+  .step button{padding:2px 7px}
+  #recbar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--warn);color:var(--warn);padding:10px 16px;border-radius:10px;z-index:50;display:none}
+  #recbar.show{display:block}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:0 6px;font-size:12px}
+  #toast{position:fixed;bottom:16px;right:16px;background:var(--panel2);border:1px solid var(--line);padding:10px 14px;border-radius:10px;opacity:0;transition:opacity .2s;z-index:60}
   #toast.show{opacity:1}
+  pre{white-space:pre-wrap}
 </style>
 </head>
 <body>
+<div id="recbar"><kbd>⏺ recording…</kbd> press a key combination <small>(<kbd>esc</kbd> to cancel)</small></div>
 <header>
   <span class="dot" id="dot"></span><h1>deejpad</h1>
   <span class="muted" id="conn">connecting…</span>
   <div class="settings">
-    <input id="port" style="width:90px" title="Serial port">
-    <input id="baud" style="width:90px" title="Baud rate">
+    <input id="port" style="width:90px" title="Serial port" placeholder="COM4">
+    <input id="baud" style="width:90px" title="Baud rate" placeholder="9600">
     <label class="muted" style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="autocal" style="width:auto"> auto-cal</label>
     <button class="small" id="reload">Reload serial</button>
     <button class="small" id="save">Save</button>
@@ -69,18 +79,14 @@
     <div class="card" style="line-height:1.7">
       <b>Slider modes</b><br>
       <b>Master volume</b> — sets the system volume.<br>
-      <b>App volume</b> — sets volume for the listed apps (exe names, e.g. <code>spotify.exe</code>). Add some with the input below the chips. Leave empty = master.<br>
+      <b>App volume</b> — sets volume for the listed apps (exe names, e.g. <code>spotify.exe</code>). Leave empty = master.<br>
       <b>Monitor brightness</b> — sets brightness of the chosen monitor (or all).<br>
       <b>None</b> — ignored.<br><br>
-      <b>Operation</b> — your board reads <code>~888</code> at 0% and <code>0</code> at 100%, so sliders default to <b>inverted</b> with calibration 0–888. Auto-cal watches the raw values and extends the range, or use the capture buttons: put a slider at its bottom, press <b>Capture min</b>, top → <b>Capture max</b>.<br><br>
-      <b>Macros</b> — each pad button can fire a combo (<code>ctrl+shift+s</code>), typed text, a media key, launch a program, master mute, brightness nudge, or a sequence of steps (one per line):
-      <pre style="background:#222633;border:1px solid var(--line);border-radius:8px;padding:8px">combo: ctrl+alt+t
-delay: 0.2
-text: hello world
-launch: notepad
-media: play
-brightness_up: 10</pre>
-      Everything saves to <code>config.json</code> — press Save (or it auto-saves while calibrating).
+      <b>Calibration</b> — your board reads <code>~888</code> at 0% and <code>0</code> at 100%, so sliders default to <b>inverted</b> with range 0–888. Auto-cal widens the range as you move; or use <b>Capture min/max</b> with a slider parked at each end.<br><br>
+      <b>Macro pad</b> — each button fires on press or release with one action, or pick <b>Multi-step sequence</b> to build a macro from steps (<kbd>+ Add step</kbd>), reorder with ▲▼, and record key combos with <kbd>⏺</kbd>. Steps run top to bottom:
+      <pre>combo: ctrl+alt+t  →send keys   delay: 0.2  →wait   text: hello
+launch: notepad   →start app   media: play →media key   mute / brightness_up: 10</pre>
+      Everything saves to <code>config.json</code>.
     </div>
   </div>
 </main>
@@ -88,11 +94,9 @@ brightness_up: 10</pre>
 
 <script>
 let CFG=null, STATE=null, MONITORS=[];
-
 const $=(s,el=document)=>el.querySelector(s);
 const el=(t,cls,html)=>{const e=document.createElement(t);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e};
-
-function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1600)}
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
 
 function tabs(){
   document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
@@ -100,6 +104,50 @@ function tabs(){
     b.classList.add('on');
     ['sliders','buttons','help'].forEach(t=>$('#tab-'+t).classList.toggle('hide',t!==b.dataset.tab));
   });
+}
+
+/* ---------- key recording ---------- */
+const KEYMAP={' ':'space','arrowup':'up','arrowdown':'down','arrowleft':'left','arrowright':'right','escape':'esc','enter':'enter','backspace':'backspace','tab':'tab','plus':'+','minus':'-','~':'~'};
+let rec=null;
+function keyFromEvent(e){
+  const k=e.key.toLowerCase();
+  if(k==='escape')return 'ESCAPE';
+  if(k==='meta')return null;
+  const parts=[];
+  if(e.ctrlKey)parts.push('ctrl');
+  if(e.altKey)parts.push('alt');
+  if(e.shiftKey)parts.push('shift');
+  if(e.metaKey)parts.push('win');
+  if(['control','alt','shift'].includes(k))return null;
+  parts.push(KEYMAP[k]||k);
+  return parts.join('+');
+}
+function startRecord(cb){
+  if(rec)return;
+  $('#recbar').classList.add('show');
+  const h=e=>{
+    const c=keyFromEvent(e);
+    if(c==='ESCAPE'){
+      stop(clearTimeout(rec?.t));
+    }else if(c){
+      stop();
+      cb(c);
+    }else return;
+    e.preventDefault();
+  };
+  function stop(){rec=null;$('#recbar').classList.remove('show');document.removeEventListener('keydown',h,true)}
+  document.addEventListener('keydown',h,true);
+  rec={t:setTimeout(stop,8000)};
+}
+
+/* ---------- config helpers ---------- */
+function pushConfig(){fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(CFG)}).then(()=>refreshApps()).catch(()=>toast('save failed'))}
+function save(){syncHeader(); pushConfig(); toast('Saved')}
+
+function syncHeader(){
+  let p=$('#port').value.trim();
+  if(!p){p='COM4';$('#port').value=p;toast('Port was empty — using COM4')}
+  CFG.port=p; CFG.baud=parseInt($('#baud').value)||9600; CFG.auto_calibrate=$('#autocal').checked;
 }
 
 /* ---------- render ---------- */
@@ -114,56 +162,62 @@ function renderSliders(){
     const c=el('div','card'); c.dataset.slider=i;
     c.appendChild(el('h3',null,`Slider ${i+1}`));
     const row=el('div','row');
-    row.appendChild(Object.assign(el('label',null,'Mode')));
+    row.appendChild(el('label',null,'Mode'));
     const sel=el('select');
     [['none','None'],['master','Master volume'],['apps','App volume'],['brightness','Monitor brightness']].forEach(([v,l])=>{
       const o=el('option',null,l); o.value=v; if(s.mode===v)o.selected=true; sel.appendChild(o);
     });
-    sel.onchange=()=>{s.mode=sel.value; renderSliders(); $('#save').click()};
+    sel.onchange=()=>{s.mode=sel.value; if(s.mode==='apps'&&!Array.isArray(s.apps))s.apps=[]; renderSliders(); save()};
     row.appendChild(sel); c.appendChild(row);
 
     if(s.mode==='apps'){
+      if(!Array.isArray(s.apps))s.apps=[];
       const chips=el('div','chips');
-      (s.apps||[]).forEach(a=>{
+      s.apps.forEach(a=>{
         const ch=el('span','chip',a+' <b>✕</b>');
-        ch.querySelector('b').onclick=()=>{s.apps=s.apps.filter(x=>x!==a); renderSliders()};
+        ch.querySelector('b').onclick=()=>{s.apps=s.apps.filter(x=>x!==a); renderSliders(); save()};
         chips.appendChild(ch);
       });
       c.appendChild(chips);
       const brow=el('div','row');
-      const inp=el('input'); inp.placeholder='exe name e.g. spotify.exe'; inp.style.flex='1';
+      const inp=el('input'); inp.placeholder='exe name e.g. spotify.exe'; inp.style.flex='1'; inp.setAttribute('list','appl');
+      const dl=el('datalist'); dl.id='appl';
+      (STATE&&STATE.apps||[]).forEach(a=>{const o=el('option'); o.value=a; dl.appendChild(o)});
+      brow.appendChild(dl);
       const add=el('button','small','Add');
-      add.onclick=()=>{const v=inp.value.trim().toLowerCase(); if(v&&!s.apps.includes(v)){s.apps.push(v); inp.value=''; renderSliders(); $('#save').click()}};
+      add.onclick=()=>{const v=inp.value.trim().toLowerCase(); if(v&&!s.apps.includes(v)){s.apps.push(v); renderSliders(); save()}};
       brow.appendChild(inp); brow.appendChild(add); c.appendChild(brow);
-      const appList=el('div','muted','active: '+(STATE&&STATE.apps.length?STATE.apps.join(', '):'…')); c.appendChild(appList);
+      const appList=el('div','muted',''); appList.dataset.appslist=1;
+      appList.textContent='active: '+((STATE&&STATE.apps&&STATE.apps.length)?STATE.apps.join(', '):'…');
+      c.appendChild(appList);
     }
 
     if(s.mode==='brightness'){
       const drow=el('div','row');
-      drow.appendChild(Object.assign(el('label',null,'Monitor')));
+      drow.appendChild(el('label',null,'Monitor'));
       const dsel=el('select');
       const all=el('option',null,'All monitors'); all.value='all';
       if(String(s.display)==='all')all.selected=true; dsel.appendChild(all);
-      MONITORS.forEach((m,ix)=>{
+      MONITORS.forEach(m=>{
         const o=el('option',null,`#${m.index} ${m.name}`); o.value=String(m.index);
         if(String(s.display)===String(m.index))o.selected=true; dsel.appendChild(o);
       });
-      dsel.onchange=()=>{s.display=dsel.value==='all'?'all':parseInt(dsel.value); $('#save').click()};
+      dsel.onchange=()=>{s.display=dsel.value==='all'?'all':parseInt(dsel.value); save()};
       drow.appendChild(dsel); c.appendChild(drow);
     }
 
     const inv=el('div','row');
-    inv.appendChild(Object.assign(el('label',null,'Invert')));
+    inv.appendChild(el('label',null,'Invert'));
     const cb=el('input'); cb.type='checkbox'; cb.style.width='auto'; cb.checked=!!s.invert;
-    cb.onchange=()=>{s.invert=cb.checked; $('#save').click()};
+    cb.onchange=()=>{s.invert=cb.checked; save()};
     inv.appendChild(cb);
-    const raw=el('span','muted',''); raw.className='muted'; raw.dataset.raw=i;
-    inv.appendChild(raw); c.appendChild(inv);
+    inv.appendChild(el('span','muted','')).setAttribute('data-raw',i);
+    c.appendChild(inv);
 
     const cal=el('div','row');
     const minb=el('button','small','Capture min'), maxb=el('button','small','Capture max');
-    minb.onclick=()=>{s.min=STATE.raw.sliders[i]; renderSliders(); $('#save').click(); toast(`Slider ${i+1} min = ${s.min}`)};
-    maxb.onclick=()=>{s.max=STATE.raw.sliders[i]; renderSliders(); $('#save').click(); toast(`Slider ${i+1} max = ${s.max}`)};
+    minb.onclick=()=>{s.min=STATE.raw.sliders[i]; renderSliders(); save(); toast(`Slider ${i+1} min = ${s.min}`)};
+    maxb.onclick=()=>{s.max=STATE.raw.sliders[i]; renderSliders(); save(); toast(`Slider ${i+1} max = ${s.max}`)};
     cal.appendChild(minb); cal.appendChild(maxb);
     cal.appendChild(el('span','muted',`raw ${s.min}–${s.max}`));
     c.appendChild(cal);
@@ -174,10 +228,69 @@ function renderSliders(){
   });
 }
 
+/* ---------- macro pad ---------- */
 const ACTION_TYPES=[['none','None'],['combo','Key combo'],['text','Type text'],['media','Media key'],
   ['launch','Launch program'],['mute','Mute master'],['brightness_up','Brightness up'],['brightness_down','Brightness down'],['steps','Multi-step sequence']];
+const STEP_TYPES=[['combo','Send keys'],['text','Type text'],['media','Media key'],['launch','Launch'],['delay','Wait (s)'],['brightness_up','Bright +'],['brightness_down','Bright −'],['mute','Mute all']];
+const STEP_PLACE={combo:'combo e.g. ctrl+shift+s',text:'text to type',media:'play / next / prev / stop / vol_up / mute',launch:'program e.g. notepad',delay:'seconds e.g. 0.3',brightness_up:'amount (5)',brightness_down:'amount (5)'};
+const MEDIA_KEYS=['play','next','prev','stop','vol_up','vol_down','mute'];
 
-const STEP_FIELDS={combo:'combo (e.g. ctrl+shift+s)',text:'text to type',media:'media key (play/next/prev/stop)',launch:'program to launch',brightness_up:'amount (5)',brightness_down:'amount (5)'};
+function comboInput(value,onset){
+  const wrap=el('span'); wrap.style.cssText='display:flex;gap:4px;flex:1;align-items:center';
+  const inp=el('input'); inp.value=value||''; inp.placeholder='combo e.g. ctrl+shift+s';
+  inp.onchange=()=>onset(inp.value);
+  const rb=el('button','small rec','⏺');
+  rb.title='Record key combo';
+  rb.onclick=()=>{rb.classList.add('on'); startRecord(c=>{rb.classList.remove('on'); inp.value=c; onset(c)})};
+  wrap.appendChild(inp); wrap.appendChild(rb);
+  return wrap;
+}
+
+function mediaInput(value,onset){
+  const inp=el('input'); inp.value=value||''; inp.setAttribute('list','medios');
+  const dl=el('datalist'); dl.id='medios';
+  MEDIA_KEYS.forEach(m=>{const o=el('option'); o.value=m; dl.appendChild(o)});
+  inp.onchange=()=>onset(inp.value);
+  const wrap=el('span'); wrap.style.cssText='display:flex;gap:4px;flex:1';
+  wrap.appendChild(inp); wrap.appendChild(dl);
+  return wrap;
+}
+
+function stepEditor(btn){
+  const box=el('div','steps');
+  const rebuild=()=>{
+    if(!Array.isArray(btn.action.steps))btn.action.steps=[];
+    box.innerHTML='';
+    btn.action.steps.forEach((st,ix)=>{
+      const r=el('div','step');
+      const sel=el('select');
+      STEP_TYPES.forEach(([v,l])=>{const o=el('option',null,l); o.value=v; if(st.type===v)o.selected=true; sel.appendChild(o)});
+      const valWrap=el('span'); valWrap.style.flex='1';
+      const setVal=v=>{st.value=v; if(st.type==='delay')st.value=parseFloat(v)||'0'; pushConfig()};
+      mkInput(st, setVal).then(w2=>valWrap.appendChild(w2));
+      const commit=()=>{st.type=sel.value; st.value=st.value||''; if(st.type==='mute')delete st.value; pushConfig(); rebuild()};
+      sel.onchange=commit;
+      const up=el('button','small','▲'); up.onclick=()=>{if(ix>0){const t=btn.action.steps; const x=t[ix]; t[ix]=t[ix-1]; t[ix-1]=x; pushConfig(); rebuild()}};
+      const dn=el('button','small','▼'); dn.onclick=()=>{const t=btn.action.steps; if(ix<t.length-1){const x=t[ix]; t[ix]=t[ix+1]; t[ix+1]=x; pushConfig(); rebuild()}};
+      const del=el('button','small','✕'); del.onclick=()=>{btn.action.steps.splice(ix,1); pushConfig(); rebuild()};
+      r.appendChild(sel); r.appendChild(valWrap); r.appendChild(up); r.appendChild(dn); r.appendChild(del);
+      box.appendChild(r);
+    });
+    const add=el('button','small','+ Add step');
+    add.onclick=()=>{btn.action.steps.push({type:'combo',value:''}); pushConfig(); rebuild()};
+    box.appendChild(add);
+  };
+  rebuild();
+  return box;
+}
+
+async function mkInput(st,setVal){
+  if(st.type==='combo')return comboInput(st.value,setVal);
+  if(st.type==='media')return mediaInput(st.value,setVal);
+  const inp=el('input'); inp.value=st.value??''; inp.placeholder=STEP_PLACE[st.type]||'';
+  inp.onchange=()=>setVal(inp.value);
+  return inp;
+}
 
 function renderButtons(){
   const wrap=$('#buttons'); wrap.innerHTML='';
@@ -185,52 +298,50 @@ function renderButtons(){
     const c=el('div','card'); c.dataset.button=i;
     const h=el('h3',null,`Button ${i+1}`);
     const lbl=el('input'); lbl.value=b.label; lbl.style.width='90px'; lbl.placeholder='label';
-    lbl.onchange=()=>{b.label=lbl.value; $('#save').click()};
+    lbl.onchange=()=>{b.label=lbl.value; save()};
     h.appendChild(lbl); c.appendChild(h);
 
     const r1=el('div','row');
-    r1.appendChild(Object.assign(el('label',null,'When')));
+    r1.appendChild(el('label',null,'When'));
     const trg=el('select');
     [['press','Pressed'],['release','Released']].forEach(([v,l])=>{const o=el('option',null,l); o.value=v; if(b.trigger===v)o.selected=true; trg.appendChild(o)});
-    trg.onchange=()=>{b.trigger=trg.value; $('#save').click()};
+    trg.onchange=()=>{b.trigger=trg.value; save()};
     r1.appendChild(trg);
     const holdLab=el('label','muted','hold'); holdLab.style.cssText='display:flex;gap:4px;align-items:center;min-width:auto';
     const hold=el('input'); hold.type='checkbox'; hold.style.width='auto'; hold.checked=!!b.hold;
-    hold.onchange=()=>{b.hold=hold.checked; $('#save').click()};
+    hold.onchange=()=>{b.hold=hold.checked; save()};
     holdLab.appendChild(hold); r1.appendChild(holdLab); c.appendChild(r1);
 
     const r2=el('div','row');
-    r2.appendChild(Object.assign(el('label',null,'Action')));
+    r2.appendChild(el('label',null,'Action'));
     const at=el('select');
     ACTION_TYPES.forEach(([v,l])=>{const o=el('option',null,l); o.value=v; if((b.action.type||'none')===v)o.selected=true; at.appendChild(o)});
     r2.appendChild(at); c.appendChild(r2);
 
-    const r3=el('div','row'); r3.style.flex='1';
-    let valInput=null, stepsTA=null;
-    const rebuild=()=>{
-      r3.innerHTML='';
+    const main=el('div'); c.appendChild(main);
+    const renderAction=()=>{
+      main.innerHTML='';
       const t=b.action.type||'none';
       if(t==='steps'){
-        stepsTA=el('textarea'); stepsTA.rows=5; stepsTA.style.cssText='flex:1;font-family:Consolas,monospace';
-        stepsTA.value=(b.action.steps||[]).map(s2=>s2.type+': '+s2.value).join('\n');
-        stepsTA.onchange=()=>{
-          b.action.steps=stepsTA.value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
-            const li=l.indexOf(':'); if(li<0)return null;
-            const k=l.slice(0,li).trim(), v=l.slice(li+1).trim(); if(!v)return null;
-            return k==='brightness_up'||k==='brightness_down'?{type:k,value:v,display:'all'}:{type:k,value:v};
-          }).filter(Boolean);
-          $('#save').click();
-        };
-        r3.appendChild(stepsTA);
+        main.appendChild(stepEditor(b));
+      }else if(t==='combo'){
+        const r=el('div','row'); r.style.flex='1';
+        r.appendChild(comboInput(b.action.value,v=>{b.action.value=v; pushConfig()}));
+        main.appendChild(r);
+      }else if(t==='media'){
+        const r=el('div','row'); r.style.flex='1';
+        r.appendChild(mediaInput(b.action.value,v=>{b.action.value=v; pushConfig()}));
+        main.appendChild(r);
       }else if(t!=='none'&&t!=='mute'){
-        valInput=el('input'); valInput.style.flex='1'; valInput.value=b.action.value||'';
-        valInput.placeholder=(STEP_FIELDS[t]||'value');
-        valInput.onchange=()=>{b.action.value=valInput.value; $('#save').click()};
-        r3.appendChild(valInput);
+        const r=el('div','row');
+        const inp=el('input'); inp.style.flex='1'; inp.value=b.action.value||'';
+        inp.placeholder={text:'text to type',launch:'program e.g. notepad'}[t]||'value';
+        inp.onchange=()=>{b.action.value=inp.value; pushConfig()};
+        r.appendChild(inp); main.appendChild(r);
       }
     };
-    at.onchange=()=>{b.action.type=at.value; b.action.value=b.action.value||''; rebuild(); $('#save').click()};
-    rebuild(); c.appendChild(r3);
+    at.onchange=()=>{b.action.type=at.value; b.action.value=b.action.value||''; renderAction(); pushConfig()};
+    renderAction();
 
     const r4=el('div','row');
     const test=el('button','small','▶ Test');
@@ -250,49 +361,38 @@ function applyState(){
     const bar=document.querySelector(`[data-sliderbar="${i}"]`); if(!bar)return;
     bar.querySelector('i').style.width=p+'%';
     bar.querySelector('span').textContent=Math.round(p)+'%';
-    const raw=document.querySelector(`[data-raw="${i}"]`); if(raw)raw.textContent='raw '+STATE.raw.sliders[i];
+    const raw=document.querySelector(`[data-raw="${i}"]`);
+    if(raw)raw.textContent='raw '+STATE.raw.sliders[i];
   });
   STATE.buttons.forEach((v,i)=>{
     const hit=document.querySelector(`[data-hit="${i}"]`);
     if(hit){hit.textContent=v?'PRESSED':'';hit.style.color='#3ddc84'}
     const card=document.querySelector(`[data-button="${i}"]`); if(card)card.classList.toggle('live',!!v);
   });
-  const m=$('#conn');
 }
 
 function refreshApps(){
   fetch('/api/apps').then(r=>r.json()).then(d=>{
-    document.querySelectorAll('[data-slider] .muted').forEach(a=>{
-      if(a.textContent.startsWith('active: '))a.textContent='active: '+(d.apps.join(', ')||'none');
-    });
+    if(STATE)STATE.apps=d.apps;
+    document.querySelectorAll('[data-appslist]').forEach(a=>a.textContent='active: '+(d.apps.join(', ')||'none'));
   }).catch(()=>{});
 }
 
 /* ---------- config io ---------- */
 async function loadConfig(){
   CFG=await (await fetch('/api/config')).json();
-  const hasApps=CFG.sliders.some(s=>s.mode==='apps');
+  render();
   fetch('/api/monitors').then(r=>r.json()).then(d=>{MONITORS=d.monitors; renderSliders()}).catch(()=>{});
-  if(hasApps)refreshApps();
 }
 
-$('#save').onclick=async()=>{
-  let p=$('#port').value.trim();
-  if(!p){p='COM4';$('#port').value=p;toast('Port was empty — using COM4')}
-  CFG.port=p; CFG.baud=parseInt($('#baud').value)||9600; CFG.auto_calibrate=$('#autocal').checked;
-  const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(CFG)});
-  toast(r.ok?'Saved':'Save failed'); refreshApps();
-};
-
+$('#save').onclick=save;
 $('#reload').onclick=async()=>{
-  let p=$('#port').value.trim();
-  if(!p){p='COM4';$('#port').value=p;toast('Port was empty — using COM4')}
-  CFG.port=p; CFG.baud=parseInt($('#baud').value)||9600;
-  await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(CFG)});
+  syncHeader();
+  await pushAsync();
   toast('Serial settings saved — server reconnects automatically');
 };
-
-$('#autocal').onchange=()=>{CFG.auto_calibrate=$('#autocal').checked; $('#save').click()};
+function pushAsync(){return fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(CFG)})}
+$('#autocal').onchange=()=>{CFG.auto_calibrate=$('#autocal').checked; save()};
 
 function connectWS(){
   const ws=new WebSocket(`ws://${location.host}/ws`);
@@ -301,7 +401,7 @@ function connectWS(){
 }
 
 tabs(); loadConfig(); connectWS();
-setInterval(()=>{const c=document.querySelector('.tabs button.on'); if(c&&c.dataset.tab==='buttons')refreshApps()},5000);
+setInterval(refreshApps,6000);
 </script>
 </body>
 </html>

@@ -42,9 +42,14 @@ def defaults():
 
 
 def load():
+    path = CONFIG_PATH
+    if not os.path.exists(path):
+        fallback = os.path.join(os.path.dirname(CONFIG_PATH), "config.default.json")
+        if os.path.exists(fallback):
+            path = fallback
     cfg = defaults()
     try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             user = json.load(f)
         # shallow-merge top level, replace lists wholesale
         for k, v in user.items():
@@ -60,7 +65,8 @@ def load():
     except FileNotFoundError:
         pass
     except Exception as e:
-        print(f"[config] failed to load {CONFIG_PATH}: {e}")
+        print(f"[config] failed to load {path}: {e}")
+    cfg['port'] = cfg.get('port') or 'COM4'
     return cfg
 
 
