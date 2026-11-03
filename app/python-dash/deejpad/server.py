@@ -57,6 +57,11 @@ async def apps():
     return {"apps": actions.active_app_names()}
 
 
+@app.get("/api/programs")
+async def programs():
+    return {"programs": actions.list_programs()}
+
+
 @app.post("/api/test/button")
 async def test_button(body: dict):
     """Execute a button action manually from the dashboard for testing."""

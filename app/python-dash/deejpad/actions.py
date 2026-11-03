@@ -112,6 +112,31 @@ def toggle_app_mute(name):
         print(f"[volume] {name} mute error: {e}")
 
 
+_proc_cache_ts = 0.0
+_programs_cache = None
+
+
+def list_programs():
+    """Unique exe names of installed/running programs, system processes filtered out."""
+    global _programs_cache, _proc_cache_ts
+    if _programs_cache is not None and time.time() - _proc_cache_ts < 10:
+        return _programs_cache
+    out = set()
+    for p in psutil.process_iter(["name", "exe"]):
+        try:
+            exe = (p.info.get("exe") or "").lower().replace("/", "\\")
+            if not exe or exe.startswith("c:\\windows\\"):
+                continue
+            name = p.info.get("name")
+            if name:
+                out.add(name.lower())
+        except Exception:
+            continue
+    _programs_cache = sorted(out)
+    _proc_cache_ts = time.time()
+    return _programs_cache
+
+
 # ---------------------------------------------------------------- brightness
 
 _sbc_lock = threading.Lock()
@@ -226,26 +251,73 @@ def mouse_wheel(value):
 
 KEY_ALIASES = {
     "play/pause": "play/pause", "playpause": "play/pause", "play": "play/pause", "pause": "play/pause",
-    "next": "nexttrack", "nexttrack": "next",
-    "prev": "prevtrack", "previous": "prevtrack", "prevtrack": "prev",
-    "stop": "stopmedia",
-    "vol_up": "volume up", "volup": "volume up", "volume_up": "volume up",
-    "vol_down": "volume down", "voldown": "volume down", "volume_down": "volume down",
-    "mute": "volume mute", "volume_mute": "volume mute",
+    "next": "next", "nexttrack": "next",
+    "prev": "prev", "previous": "prev", "prevtrack": "prev",
+    "stop": "stop", "stopmedia": "stop",
+    "vol_up": "volume_up", "volup": "volume_up", "volume_up": "volume_up",
+    "vol_down": "volume_down", "voldown": "volume_down", "volume_down": "volume_down",
+    "mute": "volume_mute", "volume_mute": "volume_mute",
+}
+
+# virtual-key codes for media keys (keyboard lib doesn't know these)
+MEDIA_VK = {
+    "play/pause": 0xB3, "play": 0xB3,
+    "next": 0xB7, "prev": 0xB6, "stop": 0xB4,
+    "volume_up": 0xAF, "volume_down": 0xAE, "volume_mute": 0xAD,
 }
 
 
 def _normalise_key(k):
-    k = (k or "").strip().lower().replace(" ", "_")
-    return KEY_ALIASES.get(k, k.replace("_", " ") if k in ("volume up", "volume down", "volume mute", "play/pause") else k)
+    k = (k or "").strip().lower().replace(" ", "_").replace("-", "_")
+    return KEY_ALIASES.get(k, k)
+
+
+def _send_vk(vk):
+    """Send a virtual key press+release directly (works for media keys)."""
+    import ctypes
+    import ctypes.wintypes as wt
+    PUL = ctypes.POINTER(ctypes.c_ulong)
+
+    class KEYBDINPUT(ctypes.Structure):
+        _fields_ = [("wVk", wt.WORD), ("wScan", wt.WORD), ("dwFlags", wt.DWORD),
+                    ("time", wt.DWORD), ("dwExtraInfo", PUL)]
+
+    class INPUTUNION(ctypes.Union):
+        _fields_ = [("ki", KEYBDINPUT), ("padding", ctypes.c_ubyte * 32)]
+
+    class INPUT(ctypes.Structure):
+        _fields_ = [("type", wt.DWORD), ("union", INPUTUNION)]
+
+    def _event(flags):
+        i = INPUT()
+        i.type = 1  # INPUT_KEYBOARD
+        i.union.ki.wVk = vk
+        i.union.ki.dwFlags = flags
+        return i
+
+    arr = (INPUT * 2)(_event(0), _event(2))  # 0=down, 2=KEYEVENTF_KEYUP
+    ctypes.windll.user32.SendInput(2, arr, ctypes.sizeof(INPUT))
+
+
+def send_media(name):
+    k = _normalise_key(name)
+    if k in MEDIA_VK:
+        _send_vk(MEDIA_VK[k])
+        return True
+    return False
 
 
 def _do_combo(combo):
     import keyboard
     keys = [_normalise_key(k) for k in combo.replace(",", "+").split("+")]
     keys = [k for k in keys if k]
-    if keys:
-        keyboard.send("+".join(keys))
+    if not keys:
+        return
+    if len(keys) == 1 and keys[0] in MEDIA_VK:
+        # single media key names route through the VK path
+        send_media(keys[0])
+        return
+    keyboard.send("+".join(keys))
 
 
 def execute_steps(steps):
@@ -267,10 +339,13 @@ def _run_steps(steps):
                 keyboard.write(str(v))
             elif t == "media":
                 k = KEY_ALIASES.get(str(v).strip().lower(), "play/pause")
-                keyboard.send(k)
+                if not send_media(k):
+                    keyboard.send(k)
             elif t == "launch":
-                import subprocess
-                subprocess.Popen(str(v), shell=True)
+                # ShellExecute resolves bare exe names via PATH + Start Menu/App Paths,
+                # and handles .lnk shortcuts too
+                import os as _os
+                _os.startfile(str(v))
             elif t == "delay":
                 time.sleep(float(v))
             elif t == "brightness_up":

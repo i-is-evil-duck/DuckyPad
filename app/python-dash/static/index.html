@@ -93,7 +93,7 @@ launch: notepad   →start app   media: play →media key   mute / brightness_up
 <div id="toast"></div>
 
 <script>
-let CFG=null, STATE=null, MONITORS=[];
+let CFG=null, STATE=null, MONITORS=[], PROGRAMS=[];
 const $=(s,el=document)=>el.querySelector(s);
 const el=(t,cls,html)=>{const e=document.createElement(t);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e};
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
@@ -232,7 +232,7 @@ function renderSliders(){
 const ACTION_TYPES=[['none','None'],['combo','Key combo'],['mouse_click','Mouse click'],['text','Type text'],['media','Media key'],
   ['launch','Launch program'],['mute','Mute master'],['brightness_up','Brightness up'],['brightness_down','Brightness down'],['steps','Multi-step sequence']];
 const STEP_TYPES=[['combo','Send keys'],['mouse_click','Mouse click'],['mouse_down','Mouse down (hold)'],['mouse_up','Mouse up'],['mouse_move','Mouse move (dx,dy)'],['wheel','Scroll'],['text','Type text'],['media','Media key'],['launch','Launch'],['delay','Wait (s)'],['brightness_up','Bright +'],['brightness_down','Bright −'],['mute','Mute all']];
-const STEP_PLACE={combo:'combo e.g. ctrl+shift+s',mouse_click:'left / right / middle (left,2 = double)',mouse_down:'left / right / middle',mouse_up:'left / right / middle',mouse_move:'dx,dy e.g. 100,-50',wheel:'clicks, − = down e.g. −3',text:'text to type',media:'play / next / prev / stop / vol_up / mute',launch:'program e.g. notepad',delay:'seconds e.g. 0.3',brightness_up:'amount (5)',brightness_down:'amount (5)'};
+const STEP_PLACE={combo:'combo e.g. ctrl+shift+s',mouse_click:'left / right / middle (left,2 = double)',mouse_down:'left / right / middle',mouse_up:'left / right / middle',mouse_move:'dx,dy e.g. 100,-50',wheel:'clicks, − = down e.g. −3',text:'text to type',media:'play / next / prev / stop / vol_up / mute',launch:'type or pick a running program',delay:'seconds e.g. 0.3',brightness_up:'amount (5)',brightness_down:'amount (5)'};
 const MEDIA_KEYS=['play','next','prev','stop','vol_up','vol_down','mute'];
 const MOUSE_KEYS=['left','right','middle','left,2','left,3','right,2'];
 
@@ -285,10 +285,22 @@ function stepEditor(btn){
   return box;
 }
 
+function progInput(value,onset){
+  const inp=el('input'); inp.value=value||''; inp.placeholder='program e.g. notepad (type or pick)';
+  inp.setAttribute('list','progs');
+  const dl=el('datalist'); dl.id='progs'; dl.setAttribute('data-progdatalist','1');
+  PROGRAMS.forEach(p=>{const o=el('option'); o.value=p; dl.appendChild(o)});
+  inp.onchange=()=>onset(inp.value);
+  const wrap=el('span'); wrap.style.cssText='display:flex;gap:4px;flex:1';
+  wrap.appendChild(inp); wrap.appendChild(dl);
+  return wrap;
+}
+
 async function mkInput(st,setVal){
   if(st.type==='combo')return comboInput(st.value,setVal);
   if(st.type==='media')return mediaInput(st.value,setVal,'medios',MEDIA_KEYS);
   if(['mouse_click','mouse_down','mouse_up'].includes(st.type))return mediaInput(st.value,setVal,'mbtns',MOUSE_KEYS);
+  if(st.type==='launch')return progInput(st.value,setVal);
   const inp=el('input'); inp.value=st.value??''; inp.placeholder=STEP_PLACE[st.type]||'';
   inp.onchange=()=>setVal(inp.value);
   return inp;
@@ -338,10 +350,14 @@ function renderButtons(){
         const r=el('div','row'); r.style.flex='1';
         r.appendChild(mediaInput(b.action.value||'left',v=>{b.action.value=v; pushConfig()},'mbtns',MOUSE_KEYS));
         main.appendChild(r);
+      }else if(t==='launch'){
+        const r=el('div','row'); r.style.flex='1';
+        r.appendChild(progInput(b.action.value,v=>{b.action.value=v; pushConfig()}));
+        main.appendChild(r);
       }else if(t!=='none'&&t!=='mute'){
         const r=el('div','row');
         const inp=el('input'); inp.style.flex='1'; inp.value=b.action.value||'';
-        inp.placeholder={text:'text to type',launch:'program e.g. notepad'}[t]||'value';
+        inp.placeholder={text:'text to type'}[t]||'value';
         inp.onchange=()=>{b.action.value=inp.value; pushConfig()};
         r.appendChild(inp); main.appendChild(r);
       }
@@ -381,6 +397,17 @@ function refreshApps(){
   fetch('/api/apps').then(r=>r.json()).then(d=>{
     if(STATE)STATE.apps=d.apps;
     document.querySelectorAll('[data-appslist]').forEach(a=>a.textContent='active: '+(d.apps.join(', ')||'none'));
+  }).catch(()=>{});
+  refreshPrograms();
+}
+
+function refreshPrograms(){
+  fetch('/api/programs').then(r=>r.json()).then(d=>{
+    PROGRAMS=d.programs||[];
+    document.querySelectorAll('[data-progdatalist]').forEach(dl=>{
+      dl.innerHTML='';
+      PROGRAMS.forEach(p=>{const o=el('option'); o.value=p; dl.appendChild(o)});
+    });
   }).catch(()=>{});
 }
 
