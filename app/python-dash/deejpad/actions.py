@@ -8,18 +8,15 @@ import psutil
 
 _master = None
 _master_ts = 0.0
+_MASTER_TTL = 3600
 
 
 def _get_master():
     global _master, _master_ts
-    if _master is None or time.time() - _master_ts > 10:
-        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-        from comtypes import CLSCTX_ALL
-        from comtypes import cast as comtypes_cast
-        import comtypes
-        devices = AudioUtilities.GetSpeakers()
-        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        _master = comtypes_cast(interface, comtypes.POINTER(IAudioEndpointVolume))
+    if _master is None or time.time() - _master_ts > _MASTER_TTL:
+        from pycaw.pycaw import AudioUtilities
+        # newer pycaw: GetSpeakers() returns an AudioDevice with an EndpointVolume property
+        _master = AudioUtilities.GetSpeakers().EndpointVolume
         _master_ts = time.time()
     return _master
 
